@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>转介绍海报生成</title>
+    <!-- 引入 Bootstrap CSS 文件 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            padding-top: 2rem;
+        }
+        .card {
+            margin-bottom: 1rem;
+        }
+        .progress {
+            height: 30px;
+        }
+        .progress-bar {
+            transition: width 0.4s ease;
+        }
+        .footer {
+            padding-top: 2rem;
+            text-align: center;
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
+        #posterPreview {
+            max-width: 100%;
+            height: auto;
+            margin-top: 1rem;
+            max-height: 200px;  /* 添加这行以限制高度 */
+            object-fit: contain;  /* 添加这行以保持图片比例 */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">转介绍海报生成</h1>
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">输入UID</h5>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="inputMethod" id="inputText" value="text" checked>
+                                <label class="form-check-label" for="inputText">直接输入UID</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="inputMethod" id="uploadFile" value="file">
+                                <label class="form-check-label" for="uploadFile">上传UID Excel文件</label>
+                            </div>
+                        </div>
+
+                        <div id="textInputContainer">
+                            <div class="mb-3">
+                                <label for="uid-text" class="form-label">输入UID,以换行分隔:</label>
+                                <textarea class="form-control" id="uid-text" name="uid-text" rows="5"></textarea>
+                            </div>
+                        </div>
+
+                        <div id="fileInputContainer" style="display: none;">
+                            <div class="mb-3">
+                                <label for="uid-file" class="form-label">上传UID Excel文件:</label>
+                                <input class="form-control" type="file" id="uid-file" name="uid-file" accept=".xlsx">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">选择海报</h5>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="posterMethod" id="defaultPoster" value="default" checked>
+                                <label class="form-check-label" for="defaultPoster">使用默认海报</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="posterMethod" id="customPoster" value="custom">
+                                <label class="form-check-label" for="customPoster">上传自定义海报</label>
+                            </div>
+                        </div>
+
+                        <div id="posterInputContainer" style="display: none;">
+                            <div class="mb-3">
+                                <label for="poster-file" class="form-label">上传背景海报图片:</label>
+                                <input class="form-control" type="file" id="poster-file" name="poster-file" accept="image/*">
+                            </div>
+                        </div>
+
+                        <div id="posterPreviewContainer">
+                            <img id="posterPreview" src="{{ url_for('static', filename='poster.png') }}" alt="海报预览">                        </div>
+                    </div>
+                </div>
+
+                <button type="button" class="btn btn-primary" onclick="uploadFiles()">生成海报</button>
+
+                <div id="progress-container" class="mt-4">
+                    <div class="progress">
+                        <div id="progress-bar" class="progress-bar bg-success" role="progressbar">等待上传...</div>
+                    </div>
+                    <div id="progress-status" class="text-center mt-2"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer mt-5">
+            <p>Powered by Hiko</p>
+        </div>
+    </div>
+
+    <!-- 引入 Bootstrap Bundle JS 文件 (包含 Popper) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let jobId = '';
+
+        // 监听输入方式的变化
+        const inputMethodRadios = document.querySelectorAll('input[name="inputMethod"]');
+        inputMethodRadios.forEach(radio => {
+            radio.addEventListener('change', function() {
+                if (this.value === 'text') {
+                    document.getElementById('textInputContainer').style.display = 'block';
+                    document.getElementById('fileInputContainer').style.display = 'none';
+                } else {
+                    document.getElementById('textInputContainer').style.display = 'none';
+                    document.getElementById('fileInputContainer').style.display = 'block';
+                }
+            });
+        });
+
+        // 监听海报选择方式的变化
+        const posterMethodRadios = document.querySelectorAll('input[name="posterMethod"]');
+        posterMethodRadios.forEach(radio => {
+            radio.addEventListener('change', function() {
+                if (this.value === 'default') {
+                    document.getElementById('posterInputContainer').style.display = 'none';
+                    document.getElementById('posterPreview').src = '/static/poster.png';
+                } else {
+                    document.getElementById('posterInputContainer').style.display = 'block';
+                    document.getElementById('posterPreview').src = '';
+                }
+            });
+        });
+
+        // 监听自定义海报文件的变化
+        document.getElementById('poster-file').addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('posterPreview').src = e.target.result;
+                }
+                reader.readAsDataURL(file);
+            } else {
+                document.getElementById('posterPreview').src = '';
+            }
+        });
+
+        function uploadFiles() {
+            const formData = new FormData();
+
+            const inputMethod = document.querySelector('input[name="inputMethod"]:checked').value;
+            if (inputMethod === 'file') {
+                const uidFile = document.querySelector('#uid-file').files[0];
+                if (!uidFile) {
+                    alert('请选择UID文件!');
+                    return;
+                }
+                formData.append('uid-file', uidFile);
+            } else {
+                const uidText = document.querySelector('#uid-text').value.trim();
+                if (!uidText) {
+                    alert('请输入UID!');
+                    return;
+                }
+                formData.append('uid-text', uidText);
+            }
+
+            const posterMethod = document.querySelector('input[name="posterMethod"]:checked').value;
+            if (posterMethod === 'custom') {
+                const posterFile = document.querySelector('#poster-file').files[0];
+                if (!posterFile) {
+                    alert('请选择海报文件!');
+                    return;
+                }
+                formData.append('poster-file', posterFile);
+            }
+
+            // Reset progress bar
+            document.getElementById('progress-bar').style.width = '0%';
+            document.getElementById('progress-bar').textContent = '上传中...';
+            document.getElementById('progress-status').textContent = '';
+
+            fetch('/upload', {
+                method: 'POST',
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                jobId = data.jobId;
+                console.log('Job ID:', jobId);
+
+                // Start updating progress after confirming jobId
+                updateProgress();
+
+                return fetch(`/process/${jobId}`, {
+                    method: 'POST',
+                    body: formData
+                });
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                // Create a link element and trigger the download
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'posters.zip';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+
+                // Initiate cleanup after a delay
+                setTimeout(() => {
+                    fetch(`/cleanup/${jobId}`, {
+                        method: 'POST'
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        console.log('Cleanup completed');
+                    })
+                    .catch(error => {
+                        console.error('Error during cleanup:', error);
+                    });
+                }, 5000);  // Delay for 5 seconds
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('progress-bar').textContent = '上传失败';
+                document.getElementById('progress-status').textContent = '';
+                alert('上传失败！');
+            });
+        }
+
+        function updateProgress() {
+            if (!jobId) {
+                console.error('Job ID is missing');
+                return;
+            }
+            fetch(`/progress/${jobId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                const progressBar = document.getElementById('progress-bar');
+                const progressStatus = document.getElementById('progress-status');
+                progressBar.style.width = `${data.progress * 100}%`;
+                progressBar.textContent = `${Math.round(data.progress * 100)}%`;
+                progressStatus.textContent = data.status;
+                console.log('Progress:', data);
+                if (data.progress < 1) {
+                    setTimeout(updateProgress, 500); // Poll every 500ms
+                } else {
+                    progressBar.textContent = '下载完成!';
+                    progressStatus.textContent = '';
+                    console.log('Progress update stopped');
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching progress:', error);
+                if (error instanceof SyntaxError) {
+                    console.error('服务器返回的JSON数据解析失败');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
