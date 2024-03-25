@@ -1,4 +1,4 @@
-from flask import Flask, request, send_file, jsonify, render_template
+from flask import Flask, request, send_file, jsonify, render_template, after_this_request
 from flask_cors import CORS
 import pandas as pd
 from PIL import Image
@@ -14,6 +14,7 @@ from threading import Lock
 import logging
 import time
 import threading
+import json
 
 
 app = Flask(__name__)
@@ -31,6 +32,11 @@ def index():
     app.logger.debug('Rendering index.html')
     return render_template('index.html')
 
+@app.route('/logs')
+def logs():
+    # 读取生成日志数据
+    log_data = read_log_data()
+    return render_template('logs.html', logs=log_data)
 
 @app.route('/upload', methods=['POST'])
 def upload_files():
@@ -179,6 +185,20 @@ def process_files(job_id):
         progress[job_id]['progress'] = 1
         app.logger.debug('Progress finalized for job ID %s: %s', job_id, progress[job_id])
 
+    @after_this_request
+    def write_log(response):
+        try:
+            log_data = {
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'uid_count': len(uids),
+                'uids': ', '.join(uids),
+                'result': '成功'
+            }
+            write_log_data(log_data)
+        except Exception as e:
+            app.logger.error('Error writing log data: %s', e)
+        return response
+
     # Send the ZIP file
     return send_file(
         zip_buffer,
@@ -186,7 +206,6 @@ def process_files(job_id):
         as_attachment=True,
         download_name=f'{job_id}_posters.zip'
     )
-
 
 @app.route('/progress/<job_id>')
 def get_progress(job_id):
@@ -201,6 +220,26 @@ def get_progress(job_id):
 def cleanup(job_id):
     threading.Thread(target=cleanup_thread, args=(job_id,)).start()
     return jsonify({'message': 'Cleanup started'})
+
+def read_log_data():
+    try:
+        with open('log_data.json', 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
+    except json.decoder.JSONDecodeError as e:
+        app.logger.error('Error decoding JSON data: %s', e)
+        return []
+
+def write_log_data(log_data):
+    try:
+        logs = read_log_data()
+        logs.append(log_data)
+        with open('log_data.json', 'w') as f:
+            json.dump(logs, f, indent=2)  # 使用 indent 参数增加可读性
+    except Exception as e:
+        app.logger.error('Error writing log data: %s', e)
+
 
 def cleanup_thread(job_id):
     app.logger.debug('Cleaning up for job ID: %s', job_id)
