@@ -245,7 +245,7 @@ def cleanup_thread(job_id):
     app.logger.debug('Cleaning up for job ID: %s', job_id)
 
     # Wait for a minute before cleaning up
-    time.sleep(5)
+    time.sleep(120)
 
     # Remove the job_id from progress
     with progress_lock:
