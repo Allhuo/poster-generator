@@ -223,7 +223,7 @@ def cleanup(job_id):
 
 def read_log_data():
     try:
-        with open('log_data.json', 'r') as f:
+        with open('logs/log_data.json', 'r') as f:
             return json.load(f)
     except FileNotFoundError:
         return []
@@ -235,7 +235,7 @@ def write_log_data(log_data):
     try:
         logs = read_log_data()
         logs.append(log_data)
-        with open('log_data.json', 'w') as f:
+        with open('logs/log_data.json', 'w') as f:
             json.dump(logs, f, indent=2)  # 使用 indent 参数增加可读性
     except Exception as e:
         app.logger.error('Error writing log data: %s', e)
