@@ -52,6 +52,22 @@ def upload_files():
     return jsonify({'jobId': job_id})
 
 
+@app.route('/download/<job_id>')
+def download_zip(job_id):
+    output_folder = f"output_{job_id}"
+    zip_filename = f'{job_id}_posters.zip'
+    zip_path = os.path.join(output_folder, zip_filename)
+
+    if not os.path.exists(zip_path):
+        return jsonify({'error': '文件不存在'}), 404
+
+    return send_file(
+        zip_path,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=zip_filename
+    )
+
 @app.route('/process/<job_id>', methods=['POST'])
 def process_files(job_id):
     app.logger.debug('Processing files for job ID: %s', job_id)
@@ -81,6 +97,7 @@ def process_files(job_id):
             return jsonify({'error': '没有提供UID'}), 400
 
         uids = [uid.strip() for uid in uid_text.split('\n') if uid.strip()]
+        print("接收到的UIDs:", uids)  # 打印接收到的UIDs
     else:
         app.logger.error('No UID input provided')
         return jsonify({'error': '没有提供UID输入'}), 400
@@ -109,11 +126,25 @@ def process_files(job_id):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
+    # 读取 UID 和短链接的对应关系
+    df_urls = pd.read_csv('./static/uid_shorturls.csv')
+    df_urls.columns = ['uid', 'shortUrl']
+    df_urls = df_urls.set_index('uid')
+
+    # 存储 UID 和短链接的字典
+    uid_shorturl_dict = {}
+
     # Generate QR codes and composite them onto the poster
     for index, uid in enumerate(uids):
         try:
+            # 获取对应的短链接
+            short_url = df_urls.loc[int(uid), 'shortUrl']
+            app.logger.debug(f'Short URL: {short_url}')  # Add this line
+            uid_shorturl_dict[uid] = short_url  # 改为'shortUrl'
+
             # Generate URL
             url = f"https://h5.jojo.kids/act2/landing.html?linkId=9533042&channel=refer_poster_all_NONE-{uid}"
+            app.logger.debug(f'Generated URL: {url}')
 
             # Create QR code
             qr = qrcode.QRCode(
@@ -124,6 +155,7 @@ def process_files(job_id):
             )
             qr.add_data(url)
             qr.make(fit=True)
+            app.logger.debug('QR code created')
 
             # Create QR code image with specified color and rounded modules
             img_qr = qr.make_image(
@@ -135,14 +167,17 @@ def process_files(job_id):
                     back_color=(255, 255, 255)
                 )
             )
+            app.logger.debug('QR code image created')
 
             # Resize if necessary
             desired_size = (150, 150)
             if img_qr.size != desired_size:
                 img_qr = img_qr.resize(desired_size, Image.Resampling.LANCZOS)
+            app.logger.debug('QR code image resized')
 
             # Open background poster
             img_poster = poster.copy()
+            app.logger.debug('Background poster opened')
 
             # Calculate QR code position
             position = (563, 1052)
@@ -157,6 +192,7 @@ def process_files(job_id):
             # Save the composite poster image
             output_path = os.path.join(output_folder, f"{uid}.png")
             img_poster.save(output_path)
+            app.logger.debug(f'Composite poster image saved at {output_path}')
 
             # Update progress for each poster generated
             with progress_lock:
@@ -168,16 +204,13 @@ def process_files(job_id):
             return jsonify({'error': '生成海报时出错'}), 500
 
     # Package the posters into a ZIP file
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+    zip_filename = f'{job_id}_posters.zip'
+    zip_path = os.path.join(output_folder, zip_filename)
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for image_file in os.listdir(output_folder):
-            image_path = os.path.join(output_folder, image_file)
-            with open(image_path, 'rb') as f:
-                file_data = f.read()
-            zip_file.writestr(image_file, file_data)
-
-    # Move to the beginning of the BytesIO object
-    zip_buffer.seek(0)
+            if image_file.endswith('.png'):  # 只打包PNG图片文件
+                image_path = os.path.join(output_folder, image_file)
+                zip_file.write(image_path, image_file)
 
     # Finalize progress
     with progress_lock:
@@ -199,13 +232,10 @@ def process_files(job_id):
             app.logger.error('Error writing log data: %s', e)
         return response
 
-    # Send the ZIP file
-    return send_file(
-        zip_buffer,
-        mimetype='application/zip',
-        as_attachment=True,
-        download_name=f'{job_id}_posters.zip'
-    )
+    app.logger.debug(f'UID-ShortURL Dictionary: {uid_shorturl_dict}')
+
+    # Return the download link and short URLs
+    return jsonify({'zip_url': f'/download/{job_id}', 'uid_shorturls': uid_shorturl_dict})
 
 @app.route('/progress/<job_id>')
 def get_progress(job_id):

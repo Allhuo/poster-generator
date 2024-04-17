@@ -128,6 +128,11 @@
                     </div>
                     <div id="progress-status" class="text-center mt-2"></div>
                 </div>
+                <div class="card">
+                    <div class="card-body">
+                        <div id="short-urls-container"></div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -183,7 +188,20 @@
                 document.getElementById('posterPreview').src = '';
             }
         });
+        function displayShortUrls(uid_shorturls) {
+            const shortUrlsContainer = document.getElementById('short-urls-container');
+            shortUrlsContainer.innerHTML = '';
 
+            const title = document.createElement('h5');
+            title.textContent = '生成的短链接:';
+            shortUrlsContainer.appendChild(title);
+
+            for (const [uid, shortUrl] of Object.entries(uid_shorturls)) {
+                const row = document.createElement('div');
+                row.textContent = `UID: ${uid}, 短链接: ${shortUrl}`;
+                shortUrlsContainer.appendChild(row);
+            }
+        }
         function uploadFiles() {
             const formData = new FormData();
 
@@ -201,6 +219,7 @@
                     alert('请输入UID!');
                     return;
                 }
+                console.log("提交的UIDs:", uidText);  // 确认发送前的UID列表
                 formData.append('uid-text', uidText);
             }
 
@@ -229,33 +248,33 @@
                 return response.json();
             })
             .then(data => {
-                jobId = data.jobId;
+                console.log('Server response:', data);
+                jobId = data.jobId;  // 设置jobId
                 console.log('Job ID:', jobId);
+                console.log('Server response:', data);
+
 
                 // Start updating progress after confirming jobId
                 updateProgress();
 
-                return fetch(`/process/${jobId}`, {
+                return fetch(`/process/${jobId}`, {  // 使用正确的jobId
                     method: 'POST',
                     body: formData
                 });
             })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-                return response.blob();
-            })
-            .then(blob => {
+            .then(response => response.json())  // Add this line
+            .then(data => {
                 // Create a link element and trigger the download
-                const url = window.URL.createObjectURL(blob);
+                const url = data.zip_url;
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = 'posters.zip';
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
-                window.URL.revokeObjectURL(url);
+
+                // 展示短链接
+                displayShortUrls(data.uid_shorturls);
 
                 // Initiate cleanup after a delay
                 setTimeout(() => {
