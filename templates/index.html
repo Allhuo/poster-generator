@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <style>
         body {
-            background-color: #f8f9fa;
+            background: linear-gradient(135deg, #e6f2ff, #fffae6);
         }
         .container {
             padding-top: 2rem;
@@ -19,6 +19,12 @@
             margin-bottom: 1rem;
             border: none;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s;
+            background: linear-gradient(135deg, #ffffff, #f5f5f5);
+        }
+        .card:hover {
+            box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
+            transform: translateY(-5px);
         }
         .card-title {
             font-weight: bold;
@@ -27,10 +33,12 @@
         .progress {
             height: 30px;
             border-radius: 15px;
+            background-color: #e9ecef;
         }
         .progress-bar {
             transition: width 0.4s ease;
             border-radius: 15px;
+            background: linear-gradient(135deg, #007bff, #ffc107);
         }
         .footer {
             padding-top: 2rem;
@@ -42,26 +50,69 @@
             max-width: 100%;
             height: auto;
             margin-top: 1rem;
-            max-height: 200px;
+            max-height: 300px;
             object-fit: contain;
+            border-radius: 5px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
         .btn-primary {
-            background-color: #007bff;
+            background: linear-gradient(135deg, #007bff, #0056b3);
             border-color: #007bff;
         }
         .btn-primary:hover {
-            background-color: #0069d9;
+            background: linear-gradient(135deg, #0069d9, #004a99);
             border-color: #0062cc;
         }
         .icon {
             margin-right: 5px;
         }
+        .short-url-item {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s;
+        }
+        .short-url-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        }
+        .short-url-item p {
+            margin: 0;
+        }
+        .copy-btn {
+            padding: 5px 10px;
+            background: linear-gradient(135deg, #ffc107, #ff9800);
+            color: #ffffff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .copy-btn:hover {
+            background: linear-gradient(135deg, #ff9800, #f57c00);
+        }
+        .qr-code {
+            width: 100px;
+            height: 100px;
+            margin-left: auto;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1 class="text-center mb-5"><i class="fas fa-images icon"></i>转介绍海报生成</h1>
-        <div class="row justify-content-center">
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <h1><i class="fas fa-images icon"></i>转介绍海报生成</h1>
+            </div>
+                <div class="col-md-4 text-end">
+                    <a href="/logs" class="btn btn-outline-secondary"><i class="fas fa-file-alt icon"></i>查看日志</a>
+                </div>
+        </div>
+        <div class="row">
             <div class="col-md-6">
                 <div class="card">
                     <div class="card-body">
@@ -113,34 +164,48 @@
                                 <input class="form-control" type="file" id="poster-file" name="poster-file" accept="image/*">
                             </div>
                         </div>
+                    </div>
+                </div>
 
+                <button type="button" class="btn btn-primary w-100 mb-4" onclick="uploadFiles()"><i class="fas fa-cog icon"></i>生成海报</button>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="far fa-eye icon"></i>海报预览</h5>
                         <div id="posterPreviewContainer">
                             <img id="posterPreview" src="{{ url_for('static', filename='poster.png') }}" alt="海报预览">
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
 
-                <button type="button" class="btn btn-primary w-100 mb-4" onclick="uploadFiles()"><i class="fas fa-cog icon"></i>生成海报</button>
-
+        <div class="row">
+            <div class="col-md-12">
                 <div id="progress-container" class="mt-4">
                     <div class="progress">
-                        <div id="progress-bar" class="progress-bar bg-success" role="progressbar">等待上传...</div>
+                        <div id="progress-bar" class="progress-bar" role="progressbar">等待上传...</div>
                     </div>
                     <div id="progress-status" class="text-center mt-2"></div>
-                </div>
-                <div class="card">
-                    <div class="card-body">
-                        <div id="short-urls-container"></div>
-                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="footer mt-5">
-            <button type="button" class="btn btn-secondary mt-3" onclick="window.location.href='/logs'"><i class="fas fa-file-alt icon"></i>查看生成日志</button>
-            <p class="mt-3">Powered by Hiko</p>
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="fas fa-link icon"></i>生成的短链接</h5>
+                        <div id="short-urls-container">
+                            <!-- 短链接将在这里动态生成 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
+
 
     <!-- 引入 Bootstrap Bundle JS 文件 (包含 Popper) -->
     <script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.1/js/bootstrap.bundle.min.js"></script>
@@ -188,20 +253,44 @@
                 document.getElementById('posterPreview').src = '';
             }
         });
-        function displayShortUrls(uid_shorturls) {
-            const shortUrlsContainer = document.getElementById('short-urls-container');
-            shortUrlsContainer.innerHTML = '';
+function displayShortUrls(uid_shorturls) {
+    const shortUrlsContainer = document.getElementById('short-urls-container');
+    shortUrlsContainer.innerHTML = '';
 
-            const title = document.createElement('h5');
-            title.textContent = '生成的短链接:';
-            shortUrlsContainer.appendChild(title);
+    for (const [uid, shortUrl] of Object.entries(uid_shorturls)) {
+        const card = document.createElement('div');
+        card.classList.add('card', 'short-url-item');
 
-            for (const [uid, shortUrl] of Object.entries(uid_shorturls)) {
-                const row = document.createElement('div');
-                row.textContent = `UID: ${uid}, 短链接: ${shortUrl}`;
-                shortUrlsContainer.appendChild(row);
-            }
+        const cardBody = document.createElement('div');
+        cardBody.classList.add('card-body', 'd-flex', 'justify-content-between', 'align-items-center');
+
+        const uidElement = document.createElement('span');
+        uidElement.textContent = `UID: ${uid}`;
+
+        const shortUrlElement = document.createElement('span');
+        shortUrlElement.textContent = shortUrl;
+
+        const copyButton = document.createElement('button');
+        copyButton.classList.add('copy-btn');
+        copyButton.innerHTML = '<i class="fas fa-copy"></i> 复制';
+        copyButton.addEventListener('click', () => {
+            navigator.clipboard.writeText(shortUrl).then(() => {
+                copyButton.innerHTML = '<i class="fas fa-check"></i> 已复制';
+                setTimeout(() => {
+                    copyButton.innerHTML = '<i class="fas fa-copy"></i> 复制';
+                }, 2000);
+            });
+        });
+
+        cardBody.appendChild(uidElement);
+        cardBody.appendChild(shortUrlElement);
+        cardBody.appendChild(copyButton);
+
+        card.appendChild(cardBody);
+
+        shortUrlsContainer.appendChild(card);
         }
+    }
         function uploadFiles() {
             const formData = new FormData();
 

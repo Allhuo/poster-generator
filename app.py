@@ -1,20 +1,27 @@
-from flask import Flask, request, send_file, jsonify, render_template, after_this_request
-from flask_cors import CORS
-import pandas as pd
-from PIL import Image
-import qrcode
-from qrcode.image.styledpil import StyledPilImage
-from qrcode.image.styles.moduledrawers import RoundedModuleDrawer
-from qrcode.image.styles.colormasks import RadialGradiantColorMask
-import os
-from datetime import datetime
-import zipfile
-import io
-from threading import Lock
-import logging
-import time
-import threading
 import json
+import logging
+import os
+import threading
+import time
+import zipfile
+from datetime import datetime
+from threading import Lock
+
+import pandas as pd
+import pytz
+import qrcode
+from PIL import Image
+from flask import Flask, request, send_file, jsonify, render_template, after_this_request
+from flask import g
+from flask_cors import CORS
+from qrcode.image.styledpil import StyledPilImage
+from qrcode.image.styles.colormasks import RadialGradiantColorMask
+from qrcode.image.styles.moduledrawers import RoundedModuleDrawer
+
+
+# Set timezone
+def get_timezone():
+    return pytz.timezone('Asia/Shanghai')
 
 
 app = Flask(__name__)
@@ -26,17 +33,21 @@ progress_lock = Lock()
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
 
+app.before_request(lambda: setattr(g, 'tz', get_timezone()))
+
 
 @app.route('/')
 def index():
     app.logger.debug('Rendering index.html')
     return render_template('index.html')
 
+
 @app.route('/logs')
 def logs():
     # 读取生成日志数据
     log_data = read_log_data()
     return render_template('logs.html', logs=log_data)
+
 
 @app.route('/upload', methods=['POST'])
 def upload_files():
@@ -67,6 +78,7 @@ def download_zip(job_id):
         as_attachment=True,
         download_name=zip_filename
     )
+
 
 @app.route('/process/<job_id>', methods=['POST'])
 def process_files(job_id):
@@ -237,6 +249,7 @@ def process_files(job_id):
     # Return the download link and short URLs
     return jsonify({'zip_url': f'/download/{job_id}', 'uid_shorturls': uid_shorturl_dict})
 
+
 @app.route('/progress/<job_id>')
 def get_progress(job_id):
     app.logger.debug('Getting progress for job ID: %s', job_id)
@@ -251,6 +264,7 @@ def cleanup(job_id):
     threading.Thread(target=cleanup_thread, args=(job_id,)).start()
     return jsonify({'message': 'Cleanup started'})
 
+
 def read_log_data():
     try:
         with open('logs/log_data.json', 'r') as f:
@@ -260,6 +274,7 @@ def read_log_data():
     except json.decoder.JSONDecodeError as e:
         app.logger.error('Error decoding JSON data: %s', e)
         return []
+
 
 def write_log_data(log_data):
     try:
