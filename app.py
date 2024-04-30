@@ -95,7 +95,6 @@ def process_files(job_id):
         if uid_file.filename == '':
             app.logger.error('No UID file selected')
             return jsonify({'error': '没有选择UID文件'}), 400
-
         try:
             df = pd.read_excel(uid_file)
             uids = df['UID'].tolist()
@@ -113,6 +112,19 @@ def process_files(job_id):
     else:
         app.logger.error('No UID input provided')
         return jsonify({'error': '没有提供UID输入'}), 400
+
+    url_prefix_method = request.form.get('urlPrefixMethod', 'default')
+    app.logger.debug(f'URL prefix method: {url_prefix_method}')
+    custom_url_prefix = request.form.get('custom-url-prefix', '')
+    app.logger.debug(f'Custom URL prefix: {custom_url_prefix}')
+
+    # Modify URL generation based on user choice
+    for index, uid in enumerate(uids):
+        if url_prefix_method == 'custom' and custom_url_prefix:
+            url = f"{custom_url_prefix}-{uid}"
+        else:
+            url = f"https://h5.jojo.kids/act2/landing.html?linkId=9533042&channel=refer_poster_all_NONE-{uid}"
+    app.logger.debug(f'Generated URL for UID {uid}: {url}')
 
     # Check poster method
     if 'poster-file' in request.files:
@@ -155,7 +167,6 @@ def process_files(job_id):
             uid_shorturl_dict[uid] = short_url  # 改为'shortUrl'
 
             # Generate URL
-            url = f"https://h5.jojo.kids/act2/landing.html?linkId=9533042&channel=refer_poster_all_NONE-{uid}"
             app.logger.debug(f'Generated URL: {url}')
 
             # Create QR code
