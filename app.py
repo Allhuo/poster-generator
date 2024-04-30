@@ -319,6 +319,5 @@ def cleanup_thread(job_id):
     except Exception as e:
         app.logger.error('Error cleaning up temporary files: %s', str(e))
 
-# 主程序
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=7070, debug=True)
