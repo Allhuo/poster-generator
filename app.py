@@ -1,20 +1,27 @@
-from flask import Flask, request, send_file, jsonify, render_template, after_this_request
-from flask_cors import CORS
-import pandas as pd
-from PIL import Image
-import qrcode
-from qrcode.image.styledpil import StyledPilImage
-from qrcode.image.styles.moduledrawers import RoundedModuleDrawer
-from qrcode.image.styles.colormasks import RadialGradiantColorMask
-import os
-from datetime import datetime
-import zipfile
-import io
-from threading import Lock
-import logging
-import time
-import threading
 import json
+import logging
+import os
+import threading
+import time
+import zipfile
+from datetime import datetime
+from threading import Lock
+
+import pandas as pd
+import pytz
+import qrcode
+from PIL import Image
+from flask import Flask, request, send_file, jsonify, render_template, after_this_request
+from flask import g
+from flask_cors import CORS
+from qrcode.image.styledpil import StyledPilImage
+from qrcode.image.styles.colormasks import RadialGradiantColorMask
+from qrcode.image.styles.moduledrawers import RoundedModuleDrawer
+
+
+# Set timezone
+def get_timezone():
+    return pytz.timezone('Asia/Shanghai')
 
 
 app = Flask(__name__)
@@ -26,17 +33,21 @@ progress_lock = Lock()
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
 
+app.before_request(lambda: setattr(g, 'tz', get_timezone()))
+
 
 @app.route('/')
 def index():
     app.logger.debug('Rendering index.html')
     return render_template('index.html')
 
+
 @app.route('/logs')
 def logs():
     # 读取生成日志数据
     log_data = read_log_data()
     return render_template('logs.html', logs=log_data)
+
 
 @app.route('/upload', methods=['POST'])
 def upload_files():
@@ -50,6 +61,23 @@ def upload_files():
 
     # Return job_id to frontend
     return jsonify({'jobId': job_id})
+
+
+@app.route('/download/<job_id>')
+def download_zip(job_id):
+    output_folder = f"output_{job_id}"
+    zip_filename = f'{job_id}_posters.zip'
+    zip_path = os.path.join(output_folder, zip_filename)
+
+    if not os.path.exists(zip_path):
+        return jsonify({'error': '文件不存在'}), 404
+
+    return send_file(
+        zip_path,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=zip_filename
+    )
 
 
 @app.route('/process/<job_id>', methods=['POST'])
@@ -67,7 +95,6 @@ def process_files(job_id):
         if uid_file.filename == '':
             app.logger.error('No UID file selected')
             return jsonify({'error': '没有选择UID文件'}), 400
-
         try:
             df = pd.read_excel(uid_file)
             uids = df['UID'].tolist()
@@ -81,9 +108,23 @@ def process_files(job_id):
             return jsonify({'error': '没有提供UID'}), 400
 
         uids = [uid.strip() for uid in uid_text.split('\n') if uid.strip()]
+        print("接收到的UIDs:", uids)  # 打印接收到的UIDs
     else:
         app.logger.error('No UID input provided')
         return jsonify({'error': '没有提供UID输入'}), 400
+
+    url_prefix_method = request.form.get('urlPrefixMethod', 'default')
+    app.logger.debug(f'URL prefix method: {url_prefix_method}')
+    custom_url_prefix = request.form.get('custom-url-prefix', '')
+    app.logger.debug(f'Custom URL prefix: {custom_url_prefix}')
+
+    # Modify URL generation based on user choice
+    for index, uid in enumerate(uids):
+        if url_prefix_method == 'custom' and custom_url_prefix:
+            url = f"{custom_url_prefix}-{uid}"
+        else:
+            url = f"https://h5.jojo.kids/act2/landing.html?linkId=9533042&channel=refer_poster_all_NONE-{uid}"
+    app.logger.debug(f'Generated URL for UID {uid}: {url}')
 
     # Check poster method
     if 'poster-file' in request.files:
@@ -109,11 +150,24 @@ def process_files(job_id):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
+    # 读取 UID 和短链接的对应关系
+    df_urls = pd.read_csv('./static/uid_shorturls.csv')
+    df_urls.columns = ['uid', 'shortUrl']
+    df_urls = df_urls.set_index('uid')
+
+    # 存储 UID 和短链接的字典
+    uid_shorturl_dict = {}
+
     # Generate QR codes and composite them onto the poster
     for index, uid in enumerate(uids):
         try:
+            # 获取对应的短链接
+            short_url = df_urls.loc[int(uid), 'shortUrl']
+            app.logger.debug(f'Short URL: {short_url}')  # Add this line
+            uid_shorturl_dict[uid] = short_url  # 改为'shortUrl'
+
             # Generate URL
-            url = f"https://h5.jojo.kids/act2/landing.html?linkId=9533042&channel=refer_poster_all_NONE-{uid}"
+            app.logger.debug(f'Generated URL: {url}')
 
             # Create QR code
             qr = qrcode.QRCode(
@@ -124,6 +178,7 @@ def process_files(job_id):
             )
             qr.add_data(url)
             qr.make(fit=True)
+            app.logger.debug('QR code created')
 
             # Create QR code image with specified color and rounded modules
             img_qr = qr.make_image(
@@ -135,14 +190,17 @@ def process_files(job_id):
                     back_color=(255, 255, 255)
                 )
             )
+            app.logger.debug('QR code image created')
 
             # Resize if necessary
             desired_size = (150, 150)
             if img_qr.size != desired_size:
                 img_qr = img_qr.resize(desired_size, Image.Resampling.LANCZOS)
+            app.logger.debug('QR code image resized')
 
             # Open background poster
             img_poster = poster.copy()
+            app.logger.debug('Background poster opened')
 
             # Calculate QR code position
             position = (563, 1052)
@@ -157,6 +215,7 @@ def process_files(job_id):
             # Save the composite poster image
             output_path = os.path.join(output_folder, f"{uid}.png")
             img_poster.save(output_path)
+            app.logger.debug(f'Composite poster image saved at {output_path}')
 
             # Update progress for each poster generated
             with progress_lock:
@@ -168,16 +227,13 @@ def process_files(job_id):
             return jsonify({'error': '生成海报时出错'}), 500
 
     # Package the posters into a ZIP file
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+    zip_filename = f'{job_id}_posters.zip'
+    zip_path = os.path.join(output_folder, zip_filename)
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for image_file in os.listdir(output_folder):
-            image_path = os.path.join(output_folder, image_file)
-            with open(image_path, 'rb') as f:
-                file_data = f.read()
-            zip_file.writestr(image_file, file_data)
-
-    # Move to the beginning of the BytesIO object
-    zip_buffer.seek(0)
+            if image_file.endswith('.png'):  # 只打包PNG图片文件
+                image_path = os.path.join(output_folder, image_file)
+                zip_file.write(image_path, image_file)
 
     # Finalize progress
     with progress_lock:
@@ -199,13 +255,11 @@ def process_files(job_id):
             app.logger.error('Error writing log data: %s', e)
         return response
 
-    # Send the ZIP file
-    return send_file(
-        zip_buffer,
-        mimetype='application/zip',
-        as_attachment=True,
-        download_name=f'{job_id}_posters.zip'
-    )
+    app.logger.debug(f'UID-ShortURL Dictionary: {uid_shorturl_dict}')
+
+    # Return the download link and short URLs
+    return jsonify({'zip_url': f'/download/{job_id}', 'uid_shorturls': uid_shorturl_dict})
+
 
 @app.route('/progress/<job_id>')
 def get_progress(job_id):
@@ -221,6 +275,7 @@ def cleanup(job_id):
     threading.Thread(target=cleanup_thread, args=(job_id,)).start()
     return jsonify({'message': 'Cleanup started'})
 
+
 def read_log_data():
     try:
         with open('logs/log_data.json', 'r') as f:
@@ -230,6 +285,7 @@ def read_log_data():
     except json.decoder.JSONDecodeError as e:
         app.logger.error('Error decoding JSON data: %s', e)
         return []
+
 
 def write_log_data(log_data):
     try:
@@ -262,7 +318,6 @@ def cleanup_thread(job_id):
             app.logger.debug('Temporary files cleaned up for job ID: %s', job_id)
     except Exception as e:
         app.logger.error('Error cleaning up temporary files: %s', str(e))
-
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=7070, debug=True)

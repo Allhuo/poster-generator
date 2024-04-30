@@ -1,6 +1,8 @@
-flask
+flask~=3.0.2
 flask_cors
-pandas
-pillow
-qrcode
+pandas~=2.2.1
+pillow~=10.2.0
+qrcode~=7.4.2
 openpyxl
+django-qrcode~=0.3
+pytz~=2024.1
